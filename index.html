@@ -148,7 +148,7 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
-    <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/08/16/prefix-tuninggqa/">
+    <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/08/16/Postgresql%20%E6%96%B0%E5%BB%BA%E6%95%B0%E6%8D%AE%E5%BA%93/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/images/avatar.gif">
@@ -162,7 +162,7 @@
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
           
-            <a href="/2025/08/16/prefix-tuninggqa/" class="post-title-link" itemprop="url">Untitled</a>
+            <a href="/2025/08/16/Postgresql%20%E6%96%B0%E5%BB%BA%E6%95%B0%E6%8D%AE%E5%BA%93/" class="post-title-link" itemprop="url">Postgresql新建数据库</a>
         </h2>
 
         <div class="post-meta">
@@ -172,86 +172,7 @@
               </span>
               <span class="post-meta-item-text">Posted on</span>
 
-              <time title="Created: 2025-08-16 10:57:20" itemprop="dateCreated datePublished" datetime="2025-08-16T10:57:20+08:00">2025-08-16</time>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <hr>
-<h1 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h1><hr>
-<p>在使用 PEFT prefix tuning 模型的时候发现报错：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><code class="hljs Python">           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3/modeling_qwen3.py&quot;</span>, line <span class="hljs-number">284</span>, <span class="hljs-keyword">in</span> forward <br><br>    hidden_states, self_attn_weights = <span class="hljs-variable language_">self</span>.self_attn( <br><br>                                       ^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py&quot;</span>, line <span class="hljs-number">1736</span>, <span class="hljs-keyword">in</span> _wrapped_call_impl <br><br>    <span class="hljs-keyword">return</span> <span class="hljs-variable language_">self</span>._call_impl(*args, **kwargs) <br><br>           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py&quot;</span>, line <span class="hljs-number">1747</span>, <span class="hljs-keyword">in</span> _call_impl <br><br>    <span class="hljs-keyword">return</span> forward_call(*args, **kwargs) <br><br>           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3/modeling_qwen3.py&quot;</span>, line <span class="hljs-number">223</span>, <span class="hljs-keyword">in</span> forward <br><br>    key_states, value_states = past_key_value.update(key_states, value_states, <span class="hljs-variable language_">self</span>.layer_idx, cache_kwargs) <br><br>                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/transformers/cache_utils.py&quot;</span>, line <span class="hljs-number">545</span>, <span class="hljs-keyword">in</span> update <br><br>    <span class="hljs-variable language_">self</span>.key_cache[layer_idx] = torch.cat([<span class="hljs-variable language_">self</span>.key_cache[layer_idx], key_states], dim=-<span class="hljs-number">2</span>) <br><br>                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>RuntimeError: Sizes of tensors must <span class="hljs-keyword">match</span> <span class="hljs-keyword">except</span> <span class="hljs-keyword">in</span> dimension <span class="hljs-number">2.</span> Expected size <span class="hljs-number">320</span> but got size <span class="hljs-number">128</span> <span class="hljs-keyword">for</span> tensor number <span class="hljs-number">1</span> <span class="hljs-keyword">in</span> the <span class="hljs-built_in">list</span>.<br></code></pre></td></tr></table></figure>
-
-
-<p>相关设置如下：</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><code class="hljs Python">prefix_config = PrefixTuningConfig(<br>            task_type=TaskType.FEATURE_EXTRACTION,<br>            num_virtual_tokens=<span class="hljs-number">64</span>，<br>            inference_mode=<span class="hljs-literal">False</span><br>        )<br>peft_model = get_peft_model(base_hf_model, prefix_config)<br></code></pre></td></tr></table></figure>
-
-
-<h1 id="排查过程"><a href="#排查过程" class="headerlink" title="排查过程"></a>排查过程</h1><p>可能是因为目前的语言模型使用了 GQA 的原因导致了其 KV_head 的数量与 Q_head 不再相等，且 head_dim 也不再遵从 hidden_size &#x2F; num_heads。</p>
-<p>具体来看：<br>Qwen3-0.6b 的模型：</p>
-<figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros">model_config.num_key_value_heads: 8<br>model_config.head_dim: 128<br>model_config.num_attention_heads: 16<br>model_config.hidden_size:1024<br><br>(self_attn): Qwen3Attention(<br>(q_proj): Linear(<span class="hljs-attribute">in_features</span>=1024, <span class="hljs-attribute">out_features</span>=2048, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (k_proj): Linear(<span class="hljs-attribute">in_features</span>=1024, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (v_proj): Linear(<span class="hljs-attribute">in_features</span>=1024, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (o_proj): Linear(<span class="hljs-attribute">in_features</span>=2048, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>)<br>(q_norm): Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>(k_norm) : Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>)<br></code></pre></td></tr></table></figure>
-
-<p>而 Qwen3-4b 的模型：</p>
-<figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros">model_config.num_key_value_heads: 8<br>model_config.head_dim: 128<br>model_config.num_attention_heads: 32<br>model_config.hidden_size: 2560<br><br>(self_attn): Qwen3Attention(<br>(q_proj): Linear (<span class="hljs-attribute">in_features</span>=2560, <span class="hljs-attribute">out_features</span>=4096, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (k_proj): Linear(<span class="hljs-attribute">in_features</span>=2560, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (v_proj): Linear(<span class="hljs-attribute">in_features</span>=2560, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (o_proj): Linear (<span class="hljs-attribute">in_features</span>=4096, <span class="hljs-attribute">out_features</span>=2560, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>)<br>(q_norm): Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>(k_norm) : Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>)<br></code></pre></td></tr></table></figure>
-
-
-<h1 id="解决方法"><a href="#解决方法" class="headerlink" title="解决方法"></a>解决方法</h1><hr>
-<p>只需要将 num_attention_heads 锚定 nums_kv_heads， token_dim 锚定 model_config.num_key_value_heads * model_config.head_dim 即可解决。</p>
-<figure class="highlight python"><table><tr><td class="code"><pre><code class="hljs Python">model_config = model.config<br>prefix_config = PrefixTuningConfig(<br>            task_type=TaskType.FEATURE_EXTRACTION,<br>            num_virtual_tokens=<span class="hljs-built_in">getattr</span>(<span class="hljs-variable language_">self</span>.model_config, <span class="hljs-string">&#x27;num_virtual_tokens&#x27;</span>, <span class="hljs-number">20</span>),<br>            inference_mode=<span class="hljs-literal">False</span>,<br>            token_dim=model_config.num_key_value_heads * model_config.head_dim,<br>            num_layers = model_config.num_hidden_layers,<br>            num_attention_heads = <span class="hljs-built_in">getattr</span>(model_config, <span class="hljs-string">&quot;num_key_value_heads&quot;</span>, model_config.num_attention_heads)<br>        )<br></code></pre></td></tr></table></figure>
-
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
-    <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2024/10/14/Postgresql%20%E6%96%B0%E5%BB%BA%E6%95%B0%E6%8D%AE%E5%BA%93/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="smetase">
-      <meta itemprop="description" content="记录我的想法">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="水杉树博客">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2024/10/14/Postgresql%20%E6%96%B0%E5%BB%BA%E6%95%B0%E6%8D%AE%E5%BA%93/" class="post-title-link" itemprop="url">Untitled</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">Posted on</span>
-
-              <time title="Created: 2024-10-14 20:36:25" itemprop="dateCreated datePublished" datetime="2024-10-14T20:36:25+08:00">2024-10-14</time>
+              <time title="Created: 2025-08-16 11:11:26" itemprop="dateCreated datePublished" datetime="2025-08-16T11:11:26+08:00">2025-08-16</time>
             </span>
 
           
@@ -291,6 +212,91 @@
 
 <h3 id="6-退出-PostgreSQL"><a href="#6-退出-PostgreSQL" class="headerlink" title="6. 退出 PostgreSQL"></a>6. 退出 PostgreSQL</h3><p>完成配置后，可以退出 PostgreSQL 命令行界面：</p>
 <figure class="highlight sql"><table><tr><td class="code"><pre><code class="hljs sql">\q<br></code></pre></td></tr></table></figure>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
+    <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/07/16/prefix-tuninggqa/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="smetase">
+      <meta itemprop="description" content="记录我的想法">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="水杉树博客">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2025/07/16/prefix-tuninggqa/" class="post-title-link" itemprop="url">PrefixTuning 与GQA 兼容性问题修复</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2025-07-16 15:00:00" itemprop="dateCreated datePublished" datetime="2025-07-16T15:00:00+08:00">2025-07-16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2025-08-16 11:13:27" itemprop="dateModified" datetime="2025-08-16T11:13:27+08:00">2025-08-16</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>在使用 PEFT prefix tuning 模型的时候发现报错：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><code class="hljs Python">           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3/modeling_qwen3.py&quot;</span>, line <span class="hljs-number">284</span>, <span class="hljs-keyword">in</span> forward <br><br>    hidden_states, self_attn_weights = <span class="hljs-variable language_">self</span>.self_attn( <br><br>                                       ^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py&quot;</span>, line <span class="hljs-number">1736</span>, <span class="hljs-keyword">in</span> _wrapped_call_impl <br><br>    <span class="hljs-keyword">return</span> <span class="hljs-variable language_">self</span>._call_impl(*args, **kwargs) <br><br>           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py&quot;</span>, line <span class="hljs-number">1747</span>, <span class="hljs-keyword">in</span> _call_impl <br><br>    <span class="hljs-keyword">return</span> forward_call(*args, **kwargs) <br><br>           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3/modeling_qwen3.py&quot;</span>, line <span class="hljs-number">223</span>, <span class="hljs-keyword">in</span> forward <br><br>    key_states, value_states = past_key_value.update(key_states, value_states, <span class="hljs-variable language_">self</span>.layer_idx, cache_kwargs) <br><br>                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>  File <span class="hljs-string">&quot;/opt/conda/lib/python3.11/site-packages/transformers/cache_utils.py&quot;</span>, line <span class="hljs-number">545</span>, <span class="hljs-keyword">in</span> update <br><br>    <span class="hljs-variable language_">self</span>.key_cache[layer_idx] = torch.cat([<span class="hljs-variable language_">self</span>.key_cache[layer_idx], key_states], dim=-<span class="hljs-number">2</span>) <br><br>                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ <br><br>RuntimeError: Sizes of tensors must <span class="hljs-keyword">match</span> <span class="hljs-keyword">except</span> <span class="hljs-keyword">in</span> dimension <span class="hljs-number">2.</span> Expected size <span class="hljs-number">320</span> but got size <span class="hljs-number">128</span> <span class="hljs-keyword">for</span> tensor number <span class="hljs-number">1</span> <span class="hljs-keyword">in</span> the <span class="hljs-built_in">list</span>.<br></code></pre></td></tr></table></figure>
+
+
+<p>相关设置如下：</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><code class="hljs Python">prefix_config = PrefixTuningConfig(<br>            task_type=TaskType.FEATURE_EXTRACTION,<br>            num_virtual_tokens=<span class="hljs-number">64</span>，<br>            inference_mode=<span class="hljs-literal">False</span><br>        )<br>peft_model = get_peft_model(base_hf_model, prefix_config)<br></code></pre></td></tr></table></figure>
+
+
+<h1 id="排查过程"><a href="#排查过程" class="headerlink" title="排查过程"></a>排查过程</h1><p>可能是因为目前的语言模型使用了 GQA 的原因导致了其 KV_head 的数量与 Q_head 不再相等，且 head_dim 也不再遵从 hidden_size &#x2F; num_heads。</p>
+<p>具体来看：<br>Qwen3-0.6b 的模型：</p>
+<figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros">model_config.num_key_value_heads: 8<br>model_config.head_dim: 128<br>model_config.num_attention_heads: 16<br>model_config.hidden_size:1024<br><br>(self_attn): Qwen3Attention(<br>(q_proj): Linear(<span class="hljs-attribute">in_features</span>=1024, <span class="hljs-attribute">out_features</span>=2048, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (k_proj): Linear(<span class="hljs-attribute">in_features</span>=1024, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (v_proj): Linear(<span class="hljs-attribute">in_features</span>=1024, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (o_proj): Linear(<span class="hljs-attribute">in_features</span>=2048, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>)<br>(q_norm): Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>(k_norm) : Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>)<br></code></pre></td></tr></table></figure>
+
+<p>而 Qwen3-4b 的模型：</p>
+<figure class="highlight routeros"><table><tr><td class="code"><pre><code class="hljs routeros">model_config.num_key_value_heads: 8<br>model_config.head_dim: 128<br>model_config.num_attention_heads: 32<br>model_config.hidden_size: 2560<br><br>(self_attn): Qwen3Attention(<br>(q_proj): Linear (<span class="hljs-attribute">in_features</span>=2560, <span class="hljs-attribute">out_features</span>=4096, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (k_proj): Linear(<span class="hljs-attribute">in_features</span>=2560, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (v_proj): Linear(<span class="hljs-attribute">in_features</span>=2560, <span class="hljs-attribute">out_features</span>=1024, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>) (o_proj): Linear (<span class="hljs-attribute">in_features</span>=4096, <span class="hljs-attribute">out_features</span>=2560, <span class="hljs-attribute">bias</span>=<span class="hljs-literal">False</span>)<br>(q_norm): Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>(k_norm) : Qwen3RMSNorm ( (128, ), <span class="hljs-attribute">eps</span>=1e-06)<br>)<br></code></pre></td></tr></table></figure>
+
+
+<h1 id="解决方法"><a href="#解决方法" class="headerlink" title="解决方法"></a>解决方法</h1><hr>
+<p>只需要将 num_attention_heads 锚定 nums_kv_heads， token_dim 锚定 model_config.num_key_value_heads * model_config.head_dim 即可解决。</p>
+<figure class="highlight python"><table><tr><td class="code"><pre><code class="hljs Python">model_config = model.config<br>prefix_config = PrefixTuningConfig(<br>            task_type=TaskType.FEATURE_EXTRACTION,<br>            num_virtual_tokens=<span class="hljs-built_in">getattr</span>(<span class="hljs-variable language_">self</span>.model_config, <span class="hljs-string">&#x27;num_virtual_tokens&#x27;</span>, <span class="hljs-number">20</span>),<br>            inference_mode=<span class="hljs-literal">False</span>,<br>            token_dim=model_config.num_key_value_heads * model_config.head_dim,<br>            num_layers = model_config.num_hidden_layers,<br>            num_attention_heads = <span class="hljs-built_in">getattr</span>(model_config, <span class="hljs-string">&quot;num_key_value_heads&quot;</span>, model_config.num_attention_heads)<br>        )<br></code></pre></td></tr></table></figure>
+
+
       
     </div>
 
@@ -446,7 +452,7 @@
         </a>
       </div>
       <div class="site-state-item site-state-tags">
-        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-count">2</span>
         <span class="site-state-item-name">tags</span>
       </div>
   </nav>
