@@ -153,6 +153,80 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
+    <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/09/07/Traefik_DNS01/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="smetase">
+      <meta itemprop="description" content="记录我的想法">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="水杉树博客">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2025/09/07/Traefik_DNS01/" class="post-title-link" itemprop="url">Traefik 通过 DNS Chanllenge 为内网提供证书</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2025-09-07 16:00:00 / Modified: 17:22:14" itemprop="dateCreated datePublished" datetime="2025-09-07T16:00:00+08:00">2025-09-07</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>为自己的 Homeserver 提供 https 证书服务可能是一个比较繁琐的工作，但提供 https 服务能力可能是诸如文件同步，密码管理等的必须要求，尽管这项服务实际上是由自行搭建的内网服务。</p>
+<p>如果使用自签证书，各个设备系统的导入程度&#x2F;信任程度也各不相同。幸好，我们可以通过 Let’s encrpyt 提供的一系列 Chanllenge 证明我们拥有某些域名从而获得 SSL 证书。其中，DNS-01 挑战 <strong>特别适合对内网或者不能直接被公网访问的服务器</strong>。</p>
+<p>接下来我们将使用 Traefik 自带的 acme 方案搭配 Cloudflare 实现证书的自动生成并自动续期。</p>
+<h1 id="生成-Cloudflare-token"><a href="#生成-Cloudflare-token" class="headerlink" title="生成 Cloudflare token"></a>生成 Cloudflare token</h1><p>这里将默认我们已经购买了一个域名并已经交由 cloudflare 托管。打开 <a target="_blank" rel="noopener" href="https://dash.cloudflare.com/">Cloudflare 管理面板</a> 点击左下角 Manage Account –&gt; Account API tokens –&gt; Create_token。<br>选择 Edit zone DNS 模版，为我们的域名赋予修改的权限，复制 Token 备用。</p>
+<h1 id="Traefik-配置"><a href="#Traefik-配置" class="headerlink" title="Traefik 配置"></a>Traefik 配置</h1><p>在 Traefik Compose 文件中增加如下选项</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-attr">services:</span><br><br>  <span class="hljs-attr">traefik:</span><br>    <span class="hljs-attr">image:</span> <span class="hljs-string">&quot;traefik:v3.5&quot;</span><br>    <span class="hljs-attr">container_name:</span> <span class="hljs-string">&quot;traefik&quot;</span><br>    <span class="hljs-attr">command:</span><br>      <span class="hljs-comment">#- &quot;--log.level=DEBUG&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--api.insecure=true&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--providers.docker=true&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--providers.docker.exposedbydefault=false&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--entryPoints.web.address=:80&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--entryPoints.websecure.address=:443&quot;</span><br>    <br>    <span class="hljs-comment"># 开启 DNS 挑战</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--certificatesresolvers.myresolver.acme.dnschallenge=true&quot;</span><br>    <span class="hljs-comment"># 指定 provider</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--certificatesresolvers.myresolver.acme.dnschallenge.provider=cloudflare&quot;</span><br>      <span class="hljs-comment">#- &quot;--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory&quot;</span><br>    <span class="hljs-comment"># 这里提供邮箱</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--certificatesresolvers.myresolver.acme.email=postmaster@example.com&quot;</span><br>	<span class="hljs-comment"># 指定证书的存储地址，这里建议放入下面 volumes 持久化存储   </span><br>	<span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json&quot;</span><br>	<span class="hljs-comment"># 延后验证时间以便 DNS 记录生效</span><br>	<span class="hljs-bullet">-</span> <span class="hljs-string">&quot;--certificatesresolvers.runci.acme.dnschallenge.delaybeforecheck=60&quot;</span><br>    <span class="hljs-attr">ports:</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;80:80&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;443:443&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;8080:8080&quot;</span><br>    <span class="hljs-attr">environment:</span><br>     <span class="hljs-comment"># 这里记得放入上一步获取的 token</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">CF_DNS_API_TOKEN=$&#123;CF_DNS_API_TOKEN&#125;</span><br>    <span class="hljs-attr">volumes:</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;./letsencrypt:/letsencrypt&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;/var/run/docker.sock:/var/run/docker.sock:ro&quot;</span><br>    <span class="hljs-attr">labels:</span><br>       <span class="hljs-comment"># label 这里我们选择显式触发去生成 wildcard 证书</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;traefik.tls.stores.default.defaultgeneratedcert.resolver=myresolver&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;traefik.tls.stores.default.defaultgeneratedcert.domain.main=lab.cc&quot;</span><br>      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;traefik.tls.stores.default.defaultgeneratedcert.domain.sans=*.lab.cc&quot;</span><br></code></pre></td></tr></table></figure>
+
+<p>启动 Traefik</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">docker compose up -d<br></code></pre></td></tr></table></figure>
+
+<p>不出意外的话，应该可以申请到证书了，可以检查 <code>./letsencrypt/acme.json</code> 文件中的内容，如果没有可以将  Traefik 的 LOG 等级调整为 DEBUG 并关注日志。</p>
+<h1 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h1><p>DNS Chanllenge 配合 Traefik 可以很方便地为 Homeserver 的服务提供 https 能力，解决自己搭建的 WebDAV &#x2F; S3 服务因为协议的问题无法使用的情况，并且可以将 VaultWarden 等较为敏感的服务置于内网中，配合设备端的分流代理提供更加安全又便利的体验。</p>
+<h1 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h1><ul>
+<li><a target="_blank" rel="noopener" href="https://doc.traefik.io/traefik/user-guides/docker-compose/acme-dns/">https://doc.traefik.io/traefik/user-guides/docker-compose/acme-dns/</a></li>
+<li><a target="_blank" rel="noopener" href="https://soulteary.com/2023/07/18/traefik-v3-docker-comprehensive-user-guide-basics.html">https://soulteary.com/2023/07/18/traefik-v3-docker-comprehensive-user-guide-basics.html</a></li>
+</ul>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
     <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/07/16/PrefixTuning%20%E4%B8%8E%20GQA%20%E5%85%BC%E5%AE%B9%E6%80%A7%E9%97%AE%E9%A2%98%E4%BF%AE%E5%A4%8D/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -395,12 +469,12 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">2</span>
+          <span class="site-state-item-count">3</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
-        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-count">3</span>
         <span class="site-state-item-name">tags</span>
       </div>
   </nav>
