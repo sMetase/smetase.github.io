@@ -153,6 +153,111 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
+    <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/09/08/%E5%AE%9E%E9%AA%8C%E5%AE%A4%20WireGuard%20%E7%BB%84%E7%BD%91%E9%83%A8%E7%BD%B2%E6%96%B9%E6%A1%88%E5%88%86%E4%BA%AB_post/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="smetase">
+      <meta itemprop="description" content="记录我的想法">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="水杉树博客">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2025/09/08/%E5%AE%9E%E9%AA%8C%E5%AE%A4%20WireGuard%20%E7%BB%84%E7%BD%91%E9%83%A8%E7%BD%B2%E6%96%B9%E6%A1%88%E5%88%86%E4%BA%AB_post/" class="post-title-link" itemprop="url">实验室 WireGuard 组网部署方案分享.md</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+              
+
+              <time title="Created: 2025-09-08 23:11:26 / Modified: 23:11:40" itemprop="dateCreated datePublished" datetime="2025-09-08T23:11:26+08:00">2025-09-08</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>无论是家庭内希望完成 HomeLab 的数字基建， 还是实验室服务器需要组网提供外部连接能力，WireGuard 往往都是一个不错的方案。它的配置简单，兼容广泛，效果也不错，兼具兼具安全与自由。相比 TailScale 等魔改方案，直接使用 WireGuard 可以作为代理节点融入“通用网络代理方案”从而实现更加无感的互联网冲浪体验，更重要的是同时带来了公网暴露的便捷性与内网隐蔽安全性。</p>
+<p>接下来分享我搭建实验室内网的方案。首先交代下实验室的网络情况，我们实验室的服务器散落在不同的网络环境中，但都处在校园网下，没有公网IP，没有IPv6。我们通过 WireGuard 将服务器连接在一个虚拟内网中，并提供校园网下的连接能力。为了能够实现进一步的公网远程连接，我们在购置的VPS 中部署 frp 来转发 WireGuard。这样做的好处是在校园网下可以使用 WireGuard 校园网的接口从而享受较高速率的连接，同时在公网环境下也可以通过 VPS 转发后的端口有效连接。</p>
+<h1 id="配置"><a href="#配置" class="headerlink" title="配置"></a>配置</h1><hr>
+<p>尽管 WireGuard 支持多种网络结构，但对于常见的需要内网穿透的场景，建设 “服务端–客户端”这种方式较为简单。</p>
+<p>首先建议在 Linux 服务器端安装 WireGuard，安装方式可以参考<a target="_blank" rel="noopener" href="https://www.wireguard.com/install/">官网</a></p>
+<h2 id="服务端的配置"><a href="#服务端的配置" class="headerlink" title="服务端的配置"></a>服务端的配置</h2><ol>
+<li><p>生成私钥公钥</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">wg genkey | <span class="hljs-built_in">tee</span> privatekey | wg pubkey &gt; publickey<br></code></pre></td></tr></table></figure>
+
+</li>
+<li><p>编辑网口配置文件<br>接下来需要新建虚拟网口，就叫它 <code>wg0</code> 吧，为了给其准备配置文件输入以下命令：</p>
+</li>
+</ol>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash"><span class="hljs-built_in">sudo</span> vim /etc/wireguard/wg0.conf<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash">[Interface]<br>Address = 10.2.100.1/24         <span class="hljs-comment"># 服务端虚拟 IP</span><br>PrivateKey = &lt;privatekey&gt;  <span class="hljs-comment"># 填入上面生成的私钥</span><br>ListenPort = 16384<br></code></pre></td></tr></table></figure>
+
+
+<p>然后使用 systemd 启动 wireguard。这种方式便于管理与配置 wiregurad 自启。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><code class="hljs bash"><span class="hljs-built_in">sudo</span> systemctl start wg-quick@wg0<br><span class="hljs-built_in">sudo</span> systemctl <span class="hljs-built_in">enable</span> wg-quick@wg0<br></code></pre></td></tr></table></figure>
+
+<h2 id="VPS-配置-FRP-转发"><a href="#VPS-配置-FRP-转发" class="headerlink" title="VPS 配置 FRP 转发"></a>VPS 配置 FRP 转发</h2><p>首先在 VPS 中下载 frp 并配置</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><code class="hljs ini"><span class="hljs-comment"># frps.toml</span><br><span class="hljs-attr">bindPort</span> = <span class="hljs-number">7066</span> <span class="hljs-comment"># 连接的端口，记得在安全组中放行</span><br><span class="hljs-attr">auth.token</span> = &lt;生成一个无序的密码&gt;<br><br><span class="hljs-attr">log.to</span> = <span class="hljs-string">&quot;/var/log/frps.log&quot;</span><br><span class="hljs-attr">log.level</span> = <span class="hljs-string">&quot;info&quot;</span><br><span class="hljs-attr">log.maxDays</span> = <span class="hljs-number">3</span><br><span class="hljs-comment"># disable log colors when log.to is console, default is false</span><br><span class="hljs-attr">log.disablePrintColor</span> = <span class="hljs-literal">false</span><br></code></pre></td></tr></table></figure>
+
+<p>同样选择在 systemd 中管理 frps，这里可以参考 <a target="_blank" rel="noopener" href="https://gofrp.org/zh-cn/docs/setup/systemd/">frp 安装文档</a></p>
+<p>然后在需要在服务器中下载 frp 并配置</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><code class="hljs ini"><span class="hljs-comment"># frpc.toml</span><br><span class="hljs-attr">serverAddr</span> = &lt;服务器的IP&gt;<br><span class="hljs-attr">serverPort</span> = &lt;上面指定的端口&gt;<br><span class="hljs-attr">auth.token</span> = &lt;上面指定的token&gt;<br><br><span class="hljs-attr">log.to</span> = <span class="hljs-string">&quot;/var/log/frpc.log&quot;</span><br><span class="hljs-comment"># trace, debug, info, warn, error</span><br><span class="hljs-attr">log.level</span> = <span class="hljs-string">&quot;info&quot;</span><br><span class="hljs-attr">log.maxDays</span> = <span class="hljs-number">3</span><br><span class="hljs-attr">log.disablePrintColor</span> = <span class="hljs-literal">false</span><br><br><br><span class="hljs-section">[[proxies]]</span><br><span class="hljs-attr">name</span> = <span class="hljs-string">&quot;wg_rter&quot;</span><br><span class="hljs-attr">type</span> = <span class="hljs-string">&quot;udp&quot;</span> <span class="hljs-comment"># wireguard 基于 udp</span><br><span class="hljs-attr">localIP</span> = <span class="hljs-string">&quot;127.0.0.1&quot;</span><br><span class="hljs-attr">localPort</span> = <span class="hljs-number">16384</span> <span class="hljs-comment"># 这个是服务器在 wg0 指定的端口</span><br><span class="hljs-attr">remotePort</span> = <span class="hljs-number">16385</span> <span class="hljs-comment"># 这个是希望 vps 转发出来的端口</span><br></code></pre></td></tr></table></figure>
+
+<p>启动 frpc 并连接，并在 VPS 安全组中放行上面设置的 <code>remotePort</code></p>
+<h2 id="客户端的配置"><a href="#客户端的配置" class="headerlink" title="客户端的配置"></a>客户端的配置</h2><p>在安装完客户端之后，如果是带有 GUI 的客户端，如 macOS，安卓等会为我们自动生成私钥密钥，我们只需要调整即可。否则依然可以使用上面的命令生成。</p>
+<figure class="highlight ini"><table><tr><td class="code"><pre><code class="hljs ini"><span class="hljs-section">[Interface]</span><br><span class="hljs-attr">Address</span> = <span class="hljs-number">10.2</span>.<span class="hljs-number">100.2</span>/<span class="hljs-number">24</span>         <span class="hljs-comment"># 服务端虚拟 IP</span><br><span class="hljs-attr">PrivateKey</span> = &lt;privatekey&gt; <br><span class="hljs-attr">DNS</span> = <span class="hljs-number">10.2</span>.<span class="hljs-number">100.1</span> <span class="hljs-comment"># 如果我们需要解析内网自定的域名，请在这里填入自建 DNS 的 IP</span><br><br><span class="hljs-section">[Peer]</span><br><span class="hljs-attr">PublicKey</span> = &lt;publickey&gt; <span class="hljs-comment"># 这里填上服务器的 publickey</span><br><span class="hljs-attr">AllowIPs</span> = <span class="hljs-number">10.2</span>.<span class="hljs-number">100.0</span>/<span class="hljs-number">24</span><br><span class="hljs-attr">Endpoint</span> = &lt;server_addr&gt;:&lt;Port&gt; <span class="hljs-comment"># 上面 vps 的 IP 与 转发的端口</span><br></code></pre></td></tr></table></figure>
+
+
+<h1 id="分流路由"><a href="#分流路由" class="headerlink" title="分流路由"></a>分流路由</h1><p>到这里，我们应该实现了实验室内网访问 &#x2F; 回家访问自建服务的功能。但对于大多数人来说，我们还需要同时满足<strong>向内与向外</strong>两个方向的需求。实际上，常见的通用代理软件已经提供了这方面的能力，帮助我们丝滑的满足需求。</p>
+<h2 id="mihomo"><a href="#mihomo" class="headerlink" title="mihomo"></a>mihomo</h2><p>以下内容直接摘自 <a target="_blank" rel="noopener" href="https://wiki.metacubex.one/en/config/proxies/wg/#wireguard_1">mihomo doc</a>：</p>
+<p>WireGuard 标准配置文件</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml">[<span class="hljs-string">Interface</span>]<br><span class="hljs-string">Address</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;本机组网IP&gt;</span><br><span class="hljs-string">ListenPort</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;本地监听端口&gt;</span><br><span class="hljs-string">PrivateKey</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;本机私钥&gt;</span><br><span class="hljs-string">DNS</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;使用的DNS&gt;</span><br><span class="hljs-string">MTU</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;预设MTU&gt;</span><br><br>[<span class="hljs-string">Peer</span>]<br><span class="hljs-string">AllowedIPs</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;转发IP段&gt;</span><br><span class="hljs-string">Endpoint</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;远端地址&gt;:&lt;远端端口&gt;</span><br><span class="hljs-string">PublicKey</span> <span class="hljs-string">=</span> <span class="hljs-string">&lt;远端公钥&gt;</span><br></code></pre></td></tr></table></figure>
+
+<p>转换为 mihomo 格式的配置</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">&quot;wg&quot;</span><br>  <span class="hljs-attr">type:</span> <span class="hljs-string">wireguard</span><br>  <span class="hljs-attr">ip:</span> <span class="hljs-string">&lt;本机组网IP，IPv4往这里填&gt;</span><br>  <span class="hljs-attr">ipv6:</span> <span class="hljs-string">&lt;本机组网IP，IPv6往这里填&gt;</span>  <span class="hljs-comment"># 没有v6地址直接删除</span><br>  <span class="hljs-attr">private-key:</span> <span class="hljs-string">&lt;本机私钥&gt;</span><br>  <span class="hljs-attr">peers:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">server:</span> <span class="hljs-string">&lt;远端地址&gt;</span><br>      <span class="hljs-attr">port:</span> <span class="hljs-string">&lt;远端端口&gt;</span><br>      <span class="hljs-attr">public-key:</span> <span class="hljs-string">&lt;远端公钥&gt;</span><br>      <span class="hljs-attr">allowed-ips:</span> [<span class="hljs-string">&#x27;0.0.0.0/0&#x27;</span>]     <span class="hljs-comment"># 分流由clash处理</span><br>      <span class="hljs-comment"># reserved: [209,98,59]        # 如果需要自己填</span><br>  <span class="hljs-attr">udp:</span> <span class="hljs-literal">true</span><br>  <span class="hljs-attr">mtu:</span> <span class="hljs-string">&lt;预设MTU&gt;</span>               <span class="hljs-comment"># 按需设置，不用直接删除</span><br>  <span class="hljs-attr">remote-dns-resolve:</span> <span class="hljs-literal">true</span>    <span class="hljs-comment"># 按需设置，不用直接删除</span><br>  <span class="hljs-attr">dns:</span> <span class="hljs-string">&lt;使用的DNS&gt;</span>             <span class="hljs-comment"># 按需设置，不用直接删除</span><br></code></pre></td></tr></table></figure>
+
+<p>上面的配置需要在 mihomo config 的  proxies 部分，下面给出节点与规则配置示例：</p>
+<figure class="highlight yaml"><table><tr><td class="code"><pre><code class="hljs yaml"><br><span class="hljs-string">...</span> <span class="hljs-string">上面略去</span><br><br><span class="hljs-attr">proxies:</span><br><span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">&quot;wg&quot;</span><br>  <span class="hljs-attr">type:</span> <span class="hljs-string">wireguard</span><br>  <span class="hljs-attr">ip:</span> <span class="hljs-string">&lt;本机组网IP，IPv4往这里填&gt;</span><br>  <span class="hljs-attr">ipv6:</span> <span class="hljs-string">&lt;本机组网IP，IPv6往这里填&gt;</span>  <span class="hljs-comment"># 没有v6地址直接删除</span><br>  <span class="hljs-attr">private-key:</span> <span class="hljs-string">&lt;本机私钥&gt;</span><br>  <span class="hljs-attr">peers:</span><br>    <span class="hljs-bullet">-</span> <span class="hljs-attr">server:</span> <span class="hljs-string">&lt;远端地址&gt;</span><br>      <span class="hljs-attr">port:</span> <span class="hljs-string">&lt;远端端口&gt;</span><br>      <span class="hljs-attr">public-key:</span> <span class="hljs-string">&lt;远端公钥&gt;</span><br>      <span class="hljs-attr">allowed-ips:</span> [<span class="hljs-string">&#x27;0.0.0.0/0&#x27;</span>]     <span class="hljs-comment"># 分流由clash处理</span><br>      <span class="hljs-comment"># reserved: [209,98,59]        # 如果需要自己填</span><br>  <span class="hljs-attr">udp:</span> <span class="hljs-literal">true</span><br>  <span class="hljs-attr">mtu:</span> <span class="hljs-string">&lt;预设MTU&gt;</span>               <span class="hljs-comment"># 按需设置，不用直接删除</span><br>  <span class="hljs-attr">remote-dns-resolve:</span> <span class="hljs-literal">true</span>    <span class="hljs-comment"># 按需设置，不用直接删除</span><br>  <span class="hljs-attr">dns:</span> <span class="hljs-string">&lt;使用的DNS&gt;</span>             <span class="hljs-comment"># 按需设置，不用直接删除</span><br>  <br><span class="hljs-string">...</span> <span class="hljs-string">中间略去</span><br><br><span class="hljs-attr">rules:</span><br><span class="hljs-bullet">-</span> <span class="hljs-string">DOMAIN-SUFFIX,lab.cc,wg</span> <span class="hljs-comment"># 假设 lab.cc 是内网自定的域名</span><br><span class="hljs-bullet">-</span> <span class="hljs-string">IP-CIDR,192.168.1.0/24,wg,no-resolve</span> <span class="hljs-comment"># 假设 192.168.1.0/24 是内网网段</span><br>  <br><span class="hljs-string">...</span> <span class="hljs-string">下面略去</span><br></code></pre></td></tr></table></figure>
+
+<p>这样保存设置并生效后应该就可以将内网访问融入到整体的分流代理中。类似的道理，我们同样可以调整 Shadowrocket 等软件的配置，添加 WireGuard 的节点配置与分流规则。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>WireGuard 轻量且强大，并具有良好的“生态”，融入到整体的分流路由中，提供超出 TailScale 等魔改版更加自由无缝的冲浪体验。能为接下来搭建 self-hosted 服务提供坚实的基础，借助诸多代理软件的力量兼具安全与便携。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-cn">
     <link itemprop="mainEntityOfPage" href="https://kakalupro.cc/2025/09/07/Traefik_DNS01/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -469,12 +574,12 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-count">4</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
-        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-count">5</span>
         <span class="site-state-item-name">tags</span>
       </div>
   </nav>
